@@ -1,0 +1,50 @@
+diff --git a/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraDeviceDetails.kt b/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraDeviceDetails.kt
+index 76b6ab0..fc64b23 100644
+--- a/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraDeviceDetails.kt
++++ b/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraDeviceDetails.kt
+@@ -48,8 +48,10 @@ class CameraDeviceDetails(private val cameraInfo: CameraInfo, extensionsManager:
+   private val hasFlash = cameraInfo.hasFlashUnit()
+   private val minZoom = cameraInfo.zoomState.value?.minZoomRatio ?: 0f
+   private val maxZoom = cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
+-  private val minExposure = cameraInfo.exposureState.exposureCompensationRange.lower
+-  private val maxExposure = cameraInfo.exposureState.exposureCompensationRange.upper
++  // AUDScan patch: report the range in EV stops (same unit as iOS), not index steps.
++  private val exposureStep = cameraInfo.exposureState.exposureCompensationStep.toDouble()
++  private val minExposure = cameraInfo.exposureState.exposureCompensationRange.lower * exposureStep
++  private val maxExposure = cameraInfo.exposureState.exposureCompensationRange.upper * exposureStep
+   private val supportsFocus = getSupportsFocus()
+   private val supportsRawCapture = false
+   private val supportsDepthCapture = false
+@@ -98,8 +100,8 @@ class CameraDeviceDetails(private val cameraInfo: CameraInfo, extensionsManager:
+     map.putDouble("minZoom", minZoom.toDouble())
+     map.putDouble("maxZoom", maxZoom.toDouble())
+     map.putDouble("neutralZoom", 1.0) // Zoom is always relative to 1.0 on Android
+-    map.putInt("minExposure", minExposure)
+-    map.putInt("maxExposure", maxExposure)
++    map.putDouble("minExposure", minExposure)
++    map.putDouble("maxExposure", maxExposure)
+     map.putString("hardwareLevel", hardwareLevel.unionValue)
+     map.putString("sensorOrientation", sensorOrientation.unionValue)
+     map.putArray("formats", formats)
+diff --git a/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraSession+Configuration.kt b/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraSession+Configuration.kt
+index 1e9c0de..1c16bba 100644
+--- a/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraSession+Configuration.kt
++++ b/node_modules/react-native-vision-camera/android/src/main/java/com/mrousavy/camera/core/CameraSession+Configuration.kt
+@@ -332,7 +332,16 @@ internal fun CameraSession.configureSideProps(config: CameraConfiguration) {
+ 
+   // Exposure
+   val currentExposureCompensation = camera.cameraInfo.exposureState.exposureCompensationIndex
+-  val exposureCompensation = config.exposure?.roundToInt() ?: 0
++  // AUDScan patch: `exposure` is in EV stops (same as iOS), converted here to
++  // the device's compensation index — steps are 1/6 or 1/3 EV depending on
++  // the phone, so passing EV straight through barely changed the exposure.
++  val exposureState = camera.cameraInfo.exposureState
++  val exposureStep = exposureState.exposureCompensationStep.toDouble()
++  val exposureRange = exposureState.exposureCompensationRange
++  val exposureCompensation = config.exposure?.let { ev ->
++    if (!exposureState.isExposureCompensationSupported || exposureStep <= 0.0) 0
++    else (ev / exposureStep).roundToInt().coerceIn(exposureRange.lower, exposureRange.upper)
++  } ?: 0
+   if (currentExposureCompensation != exposureCompensation) {
+     camera.cameraControl.setExposureCompensationIndex(exposureCompensation)
+   }

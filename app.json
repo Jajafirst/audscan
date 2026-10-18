@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "ios": {
+      "bundleIdentifier": "com.firstz.audscan",
+      "infoPlist": {
+        "NSMotionUsageDescription": "AUDScan reads the phone's tilt while scanning a banknote, to detect the note's optically variable ink shifting colour as it moves."
+      }
+    },
+    "android": {
+      "package": "com.anonymous.audscanmobile"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.5"
+          }
+        }
+      ]
+    ]
+  }
+}
